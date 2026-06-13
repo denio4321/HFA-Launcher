@@ -26,10 +26,12 @@ El RID de Windows es **win-x86** a propósito: corre tanto en Windows de 32 como
 dotnet publish HabboCustomLauncher.csproj -c Release -r win-x86 --self-contained true -o publish
 ```
 
-## Releases automáticas
+## Releases automáticas (multiplataforma)
 
 Hay un workflow de GitHub Actions (`.github/workflows/release.yml`) que, **al hacer push de un tag
-`v*`**, compila el launcher y crea una Release con el zip adjunto:
+`v*`**, compila el launcher self-contained + single-file para **Windows, Linux y macOS** (matriz de
+RIDs: `win-x86`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`) y crea **una** Release con
+todos los binarios adjuntos (`.exe`+`.zip` en Windows, `.tar.gz` en Linux/macOS):
 
 ```powershell
 git tag v1.0.0

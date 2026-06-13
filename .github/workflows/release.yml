@@ -1,21 +1,37 @@
 name: Release
 
-# Crea una Release de GitHub al hacer push de un tag v* (p. ej. v1.0.0).
-# Compila el launcher self-contained para Windows (RID win-x86: corre en x86 y x64, y embebe
-# los parches AIR de Windows que el .csproj solo incluye con win-x86/Debug) y adjunta el zip.
+# Al hacer push de un tag v* (o manualmente), compila el launcher self-contained + single-file
+# para Windows, Linux y macOS, y crea UNA Release con todos los binarios adjuntos.
+#
+# Cada RID se compila en su runner adecuado porque el .csproj embebe los .zip de parche AIR
+# de forma condicional por RuntimeIdentifier (win-x86 / linux-x64 / linux-arm64 / osx-x64 /
+# osx-arm64). win-x86 cubre Windows de 32 y 64 bits.
+#
+# NOTA: los binarios van SIN FIRMAR. macOS mostrará Gatekeeper (clic derecho → Abrir) y Windows
+# SmartScreen hasta que se añada firma/notarización (rcodesign + Apple Dev ID / Azure Trusted Signing).
 
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:   # permite lanzarlo a mano desde la pestaña Actions
+  workflow_dispatch:
 
 permissions:
-  contents: write       # necesario para crear la Release
+  contents: write
 
 jobs:
-  release:
-    runs-on: windows-latest
+  build:
+    name: Build ${{ matrix.rid }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, rid: win-x86 }
+          - { os: ubuntu-latest,  rid: linux-x64 }
+          - { os: ubuntu-latest,  rid: linux-arm64 }
+          - { os: macos-latest,   rid: osx-x64 }
+          - { os: macos-latest,   rid: osx-arm64 }
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,7 +41,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      # MSBuild Version exige x.y.z (sin la 'v' del tag). Derivamos la versión numérica.
+      # MSBuild Version exige x.y.z (sin la 'v' del tag).
       - name: Derive version
         id: ver
         shell: bash
@@ -34,28 +50,54 @@ jobs:
           if [[ ! "$ver" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(\.[0-9]+)?$ ]]; then ver="1.0.0"; fi
           echo "version=$ver" >> "$GITHUB_OUTPUT"
 
-      # Single-file para que el .exe sea autónomo (se pueda subir y ejecutar suelto).
-      - name: Publish (win-x86, single-file, self-contained)
-        shell: pwsh
+      - name: Publish (${{ matrix.rid }}, single-file, self-contained)
+        shell: bash
         run: >
           dotnet publish HabboCustomLauncher.csproj
-          -c Release -r win-x86 --self-contained true
+          -c Release -r ${{ matrix.rid }} --self-contained true
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:Version=${{ steps.ver.outputs.version }}
           -o publish
 
-      - name: Prepare artifacts (.exe + .zip)
+      - name: Package (Windows → .exe + .zip)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Copy-Item publish/HabboCustomLauncher.exe "HFA-Launcher-${{ github.ref_name }}-win-x86.exe" -Force
-          Compress-Archive -Path publish/* -DestinationPath "HFA-Launcher-${{ github.ref_name }}-win-x86.zip" -Force
+          Copy-Item publish/HabboCustomLauncher.exe "HFA-Launcher-${{ github.ref_name }}-${{ matrix.rid }}.exe" -Force
+          Compress-Archive -Path publish/* -DestinationPath "HFA-Launcher-${{ github.ref_name }}-${{ matrix.rid }}.zip" -Force
+
+      - name: Package (Linux/macOS → .tar.gz)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chmod +x publish/HabboCustomLauncher || true
+          tar -C publish -czf "HFA-Launcher-${{ github.ref_name }}-${{ matrix.rid }}.tar.gz" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: |
+            HFA-Launcher-*.exe
+            HFA-Launcher-*.zip
+            HFA-Launcher-*.tar.gz
+          if-no-files-found: ignore
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            HFA-Launcher-*-win-x86.exe
-            HFA-Launcher-*-win-x86.zip
+          files: dist/**
           generate_release_notes: true
           fail_on_unmatched_files: true
