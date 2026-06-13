@@ -1683,21 +1683,29 @@ public partial class MainWindow : Window
             var local  = new Version(localRaw.Major, localRaw.Minor, Math.Max(0, localRaw.Build));
             if (remote <= local) return;
 
-            // Asset zip win-x86 + página de la release (fallback).
-            string assetUrl = "";
+            string pageUrl = root.TryGetProperty("html_url", out var h) ? (h.GetString() ?? "") : "";
+
+            // Asset del paquete para ESTA plataforma+arquitectura.
+            string arch = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64";
+            string suffix;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))    suffix = "win-x86.exe";
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) suffix = "linux-" + arch + ".AppImage";
+            else                                                        suffix = "osx-" + arch + ".dmg";
+
+            string assetUrl = "", assetName = "";
             if (root.TryGetProperty("assets", out var assets))
             {
                 foreach (var a in assets.EnumerateArray())
                 {
-                    string name = a.TryGetProperty("name", out var n) ? (n.GetString() ?? "") : "";
-                    if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) && name.Contains("win-x86"))
+                    string nm = a.TryGetProperty("name", out var n) ? (n.GetString() ?? "") : "";
+                    if (nm.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
                     {
+                        assetName = nm;
                         assetUrl = a.TryGetProperty("browser_download_url", out var u) ? (u.GetString() ?? "") : "";
                         break;
                     }
                 }
             }
-            string pageUrl = root.TryGetProperty("html_url", out var h) ? (h.GetString() ?? "") : "";
 
             bool accept = await ConfirmBox(
                 AppTranslator.UpdateTitle[CurrentLanguageInt],
@@ -1705,14 +1713,8 @@ public partial class MainWindow : Window
                 AppTranslator.UpdateNow[CurrentLanguageInt]);
             if (!accept) return;
 
-            if (!string.IsNullOrEmpty(assetUrl) && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                await DownloadAndApplyUpdateAsync(assetUrl);
-            }
-            else if (!string.IsNullOrEmpty(pageUrl))
-            {
-                OpenUrl(pageUrl);
-            }
+            if (!string.IsNullOrEmpty(assetUrl)) await ApplyUpdateAsync(assetUrl, assetName, pageUrl);
+            else if (!string.IsNullOrEmpty(pageUrl)) OpenUrl(pageUrl);
         }
         catch
         {
@@ -1732,50 +1734,85 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Descarga el zip de la release, lo extrae y lanza un helper de PowerShell que espera a que
-    /// este proceso termine, copia los ficheros nuevos sobre la carpeta de instalación y reinicia
-    /// el launcher (los .exe no se pueden sobrescribir mientras corren). Solo Windows.
+    /// Actualización AUTOMÁTICA: descarga el paquete single-file de la plataforma y lanza un script
+    /// desatendido que espera a que el launcher se cierre, reemplaza el ejecutable por el nuevo y lo
+    /// relanza. Windows → .bat (reemplaza el .exe); Linux → .sh (reemplaza el AppImage/binario);
+    /// macOS → abre el .dmg para arrastrar (reemplazar un .app en marcha no es fiable). Ante
+    /// cualquier fallo cae a abrir la página de la release. No lanza.
     /// </summary>
-    private async Task DownloadAndApplyUpdateAsync(string zipUrl)
+    private async Task ApplyUpdateAsync(string assetUrl, string assetName, string pageUrl)
     {
-        string tmp = Path.Combine(Path.GetTempPath(), "HFA-Launcher-Update");
-        try { if (Directory.Exists(tmp)) Directory.Delete(tmp, true); } catch { }
-        Directory.CreateDirectory(tmp);
-        string zipPath = Path.Combine(tmp, "update.zip");
-        string extractDir = Path.Combine(tmp, "extract");
-
-        var download = DownloadRemoteFileAsync(zipUrl, zipPath);
-        while (!download.IsCompleted)
+        try
         {
-            StartNewInstanceButton!.Text = "Actualizando launcher (" + CurrentDownloadProgress + "%)";
-            await Task.Delay(100);
+            bool win = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+            bool mac = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+
+            string tmp = Path.Combine(Path.GetTempPath(), "HFA-Launcher-Update");
+            try { if (Directory.Exists(tmp)) Directory.Delete(tmp, true); } catch { }
+            Directory.CreateDirectory(tmp);
+            string newFile = Path.Combine(tmp, string.IsNullOrEmpty(assetName) ? "update.bin" : assetName);
+
+            var dl = DownloadRemoteFileAsync(assetUrl, newFile);
+            while (!dl.IsCompleted)
+            {
+                StartNewInstanceButton!.Text = "Descargando actualización (" + CurrentDownloadProgress + "%)";
+                await Task.Delay(100);
+            }
+            if (!File.Exists(newFile) || new FileInfo(newFile).Length < 1024) { OpenUrl(pageUrl); return; }
+
+            // macOS: montar/arrastrar el .dmg (no se puede reemplazar un .app en ejecución de forma fiable).
+            if (mac)
+            {
+                Process.Start(new ProcessStartInfo("open", "\"" + newFile + "\"") { UseShellExecute = false });
+                return;
+            }
+
+            // Ejecutable actual a reemplazar (AppImage expone su ruta en $APPIMAGE).
+            string curExe = Environment.GetEnvironmentVariable("APPIMAGE")
+                ?? Environment.ProcessPath
+                ?? Process.GetCurrentProcess().MainModule?.FileName ?? "";
+            if (string.IsNullOrEmpty(curExe)) { OpenUrl(pageUrl); return; }
+            int pid = Environment.ProcessId;
+
+            if (win)
+            {
+                string bat = Path.Combine(tmp, "update.bat");
+                File.WriteAllText(bat,
+                    "@echo off\r\n" +
+                    ":loop\r\n" +
+                    "tasklist /fi \"PID eq " + pid + "\" 2>nul | find \"" + pid + "\" >nul && (timeout /t 1 /nobreak >nul & goto loop)\r\n" +
+                    "move /y \"" + curExe + "\" \"" + curExe + ".bak\" >nul 2>&1\r\n" +
+                    "move /y \"" + newFile + "\" \"" + curExe + "\" >nul 2>&1\r\n" +
+                    "del \"" + curExe + ".bak\" >nul 2>&1\r\n" +
+                    "start \"\" \"" + curExe + "\"\r\n" +
+                    "del \"%~f0\"\r\n");
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = "/c start \"\" /min \"" + bat + "\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+            }
+            else // Linux
+            {
+                string sh = Path.Combine(tmp, "update.sh");
+                File.WriteAllText(sh,
+                    "#!/bin/sh\n" +
+                    "while kill -0 " + pid + " 2>/dev/null; do sleep 1; done\n" +
+                    "mv -f \"" + newFile + "\" \"" + curExe + "\"\n" +
+                    "chmod +x \"" + curExe + "\"\n" +
+                    "nohup \"" + curExe + "\" >/dev/null 2>&1 &\n");
+                Process.Start(new ProcessStartInfo { FileName = "/bin/sh", Arguments = "\"" + sh + "\"", UseShellExecute = false });
+            }
+
+            // Cerrar para liberar el ejecutable; el script espera a que el PID muera y lo reemplaza.
+            Process.GetCurrentProcess().Kill();
         }
-
-        Directory.CreateDirectory(extractDir);
-        System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractDir, true);
-
-        string appDir  = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
-        string exePath = Process.GetCurrentProcess().MainModule?.FileName ?? Path.Combine(appDir, "HabboCustomLauncher.exe");
-        int pid = Environment.ProcessId;
-
-        string updater = Path.Combine(tmp, "updater.ps1");
-        File.WriteAllText(updater,
-            "param([int]$ProcessId,[string]$Src,[string]$Dst,[string]$Exe)\n" +
-            "try { Wait-Process -Id $ProcessId -Timeout 60 -ErrorAction SilentlyContinue } catch {}\n" +
-            "Start-Sleep -Milliseconds 800\n" +
-            "Copy-Item -Path (Join-Path $Src '*') -Destination $Dst -Recurse -Force\n" +
-            "Start-Process -FilePath $Exe\n");
-
-        Process.Start(new ProcessStartInfo
+        catch
         {
-            FileName = "powershell",
-            Arguments = $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{updater}\" -ProcessId {pid} -Src \"{extractDir}\" -Dst \"{appDir}\" -Exe \"{exePath}\"",
-            UseShellExecute = false,
-            CreateNoWindow = true
-        });
-
-        // Cerrar el launcher para liberar los ficheros que el helper va a reemplazar.
-        Process.GetCurrentProcess().Kill();
+            try { OpenUrl(pageUrl); } catch { }
+        }
     }
 
     public void AddOrUpdateInstallation(string version, string path, string client, long lastModified)
