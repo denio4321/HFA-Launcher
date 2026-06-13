@@ -129,6 +129,13 @@ public class AppTranslator
     };
     public static string[] CreditsRepoLabel = { "LilithRainbows' launcher (GitHub repo)", "Launcher de LilithRainbows (repo en GitHub)" };
     public static string[] CreditsClose = { "Close", "Cerrar" };
+    public static string[] UpdateTitle = { "Update available", "Actualización disponible" };
+    public static string[] UpdateAvailable =
+    {
+        "A new version ({0}) of the HFA Launcher is available. Download and install now?",
+        "Hay una nueva versión ({0}) del HFA Launcher disponible. ¿Descargar e instalar ahora?"
+    };
+    public static string[] UpdateNow = { "Update now", "Actualizar ahora" };
     public static string[] GenericLoading = { "Loading", "Cargando" };
     public static string[] DownloadingClient = { "Downloading client", "Descargando cliente" };
     public static string[] ExtractingClient = { "Extracting client", "Extrayendo cliente" };

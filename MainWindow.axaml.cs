@@ -64,6 +64,9 @@ public partial class MainWindow : Window
     // Repo de distribución de clientes HFA (generado por HfaPlus build). AIR_HFA descarga el SWF
     // ya parcheado por versión desde aquí, en lugar de exigir un build local.
     public string HfaPlusSwfBaseUrl = "https://raw.githubusercontent.com/denio4321/HfaPlusSwf/main";
+    // Repo del propio launcher: el autoactualizador consulta su última release.
+    public const string LauncherRepo = "denio4321/HFA-Launcher";
+    private bool _updateChecked = false;
     private string LauncherUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HabboLauncher/1.0.41 Chrome/87.0.4280.141 Electron/11.3.0 Safari/537.36";
 
     public MainWindow()
@@ -219,7 +222,14 @@ public partial class MainWindow : Window
     private void DisplayLauncherVersionOnFooter()
     {
         FooterButton!.BackColor = Color.Parse("Transparent");
-        FooterButton.Text = "HFA Launcher v1 (06/06/2026)";
+        FooterButton.Text = "HFA Launcher v" + LauncherVersion();
+    }
+
+    /// <summary>Versión interna del launcher (assembly version, Major.Minor.Build).</summary>
+    private static string LauncherVersion()
+    {
+        var v = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0);
+        return $"{v.Major}.{v.Minor}.{v.Build}";
     }
 
     private void DisplayCurrentUserOnFooter()
@@ -1596,6 +1606,131 @@ public partial class MainWindow : Window
         {
             _ = EnsureWindowFocus(LoadingWindowChild);
         }
+        if (!_updateChecked)
+        {
+            _updateChecked = true;
+            _ = CheckForLauncherUpdateAsync();
+        }
+    }
+
+    // ---- Autoactualizador del launcher ---------------------------------------------------
+
+    /// <summary>
+    /// Consulta la última release de <see cref="LauncherRepo"/> en GitHub, compara su tag con la
+    /// versión interna y, si hay una más nueva, promptea al usuario. Si acepta, descarga el zip
+    /// win-x86 y aplica la actualización (helper que reemplaza los ficheros y reinicia). En
+    /// cualquier fallo, abre la página de la release como alternativa. Best-effort: nunca lanza.
+    /// </summary>
+    private async Task CheckForLauncherUpdateAsync()
+    {
+        try
+        {
+            string json = await GetRemoteJsonAsync("https://api.github.com/repos/" + LauncherRepo + "/releases/latest");
+            if (string.IsNullOrWhiteSpace(json)) return;
+
+            JsonElement root = JsonDocument.Parse(json).RootElement;
+            if (!root.TryGetProperty("tag_name", out var tagEl)) return;
+            string tag = tagEl.GetString() ?? "";
+            if (!Version.TryParse(tag.TrimStart('v', 'V'), out var remoteRaw)) return;
+
+            var localRaw = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0);
+            var remote = new Version(remoteRaw.Major, remoteRaw.Minor, Math.Max(0, remoteRaw.Build));
+            var local  = new Version(localRaw.Major, localRaw.Minor, Math.Max(0, localRaw.Build));
+            if (remote <= local) return;
+
+            // Asset zip win-x86 + página de la release (fallback).
+            string assetUrl = "";
+            if (root.TryGetProperty("assets", out var assets))
+            {
+                foreach (var a in assets.EnumerateArray())
+                {
+                    string name = a.TryGetProperty("name", out var n) ? (n.GetString() ?? "") : "";
+                    if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) && name.Contains("win-x86"))
+                    {
+                        assetUrl = a.TryGetProperty("browser_download_url", out var u) ? (u.GetString() ?? "") : "";
+                        break;
+                    }
+                }
+            }
+            string pageUrl = root.TryGetProperty("html_url", out var h) ? (h.GetString() ?? "") : "";
+
+            bool accept = await ConfirmBox(
+                AppTranslator.UpdateTitle[CurrentLanguageInt],
+                string.Format(AppTranslator.UpdateAvailable[CurrentLanguageInt], tag),
+                AppTranslator.UpdateNow[CurrentLanguageInt]);
+            if (!accept) return;
+
+            if (!string.IsNullOrEmpty(assetUrl) && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                await DownloadAndApplyUpdateAsync(assetUrl);
+            }
+            else if (!string.IsNullOrEmpty(pageUrl))
+            {
+                OpenUrl(pageUrl);
+            }
+        }
+        catch
+        {
+            // Chequeo de actualización best-effort: nunca debe romper el arranque.
+        }
+    }
+
+    /// <summary>Diálogo de confirmación (reutiliza MessageBox). Devuelve true si pulsa el botón de acción.</summary>
+    public async Task<bool> ConfirmBox(string title, string message, string okButtonText)
+    {
+        var dialog = new MessageBox();
+        dialog.ConfigureContent(title, message);
+        dialog.SetConfirmMode(okButtonText);
+        while (IsVisible == false) await Task.Delay(100);
+        await dialog.ShowDialog(this);
+        return dialog.Confirmed;
+    }
+
+    /// <summary>
+    /// Descarga el zip de la release, lo extrae y lanza un helper de PowerShell que espera a que
+    /// este proceso termine, copia los ficheros nuevos sobre la carpeta de instalación y reinicia
+    /// el launcher (los .exe no se pueden sobrescribir mientras corren). Solo Windows.
+    /// </summary>
+    private async Task DownloadAndApplyUpdateAsync(string zipUrl)
+    {
+        string tmp = Path.Combine(Path.GetTempPath(), "HFA-Launcher-Update");
+        try { if (Directory.Exists(tmp)) Directory.Delete(tmp, true); } catch { }
+        Directory.CreateDirectory(tmp);
+        string zipPath = Path.Combine(tmp, "update.zip");
+        string extractDir = Path.Combine(tmp, "extract");
+
+        var download = DownloadRemoteFileAsync(zipUrl, zipPath);
+        while (!download.IsCompleted)
+        {
+            StartNewInstanceButton!.Text = "Actualizando launcher (" + CurrentDownloadProgress + "%)";
+            await Task.Delay(100);
+        }
+
+        Directory.CreateDirectory(extractDir);
+        System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractDir, true);
+
+        string appDir  = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        string exePath = Process.GetCurrentProcess().MainModule?.FileName ?? Path.Combine(appDir, "HabboCustomLauncher.exe");
+        int pid = Environment.ProcessId;
+
+        string updater = Path.Combine(tmp, "updater.ps1");
+        File.WriteAllText(updater,
+            "param([int]$ProcessId,[string]$Src,[string]$Dst,[string]$Exe)\n" +
+            "try { Wait-Process -Id $ProcessId -Timeout 60 -ErrorAction SilentlyContinue } catch {}\n" +
+            "Start-Sleep -Milliseconds 800\n" +
+            "Copy-Item -Path (Join-Path $Src '*') -Destination $Dst -Recurse -Force\n" +
+            "Start-Process -FilePath $Exe\n");
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "powershell",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{updater}\" -ProcessId {pid} -Src \"{extractDir}\" -Dst \"{appDir}\" -Exe \"{exePath}\"",
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+
+        // Cerrar el launcher para liberar los ficheros que el helper va a reemplazar.
+        Process.GetCurrentProcess().Kill();
     }
 
     public void AddOrUpdateInstallation(string version, string path, string client, long lastModified)

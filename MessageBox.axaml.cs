@@ -16,6 +16,8 @@ public partial class MessageBox : Window
     public int CurrentLanguageInt = 0;
     public bool CopyMessageToClipboardBusy = false;
     public string ClipboardDebugContent = "";
+    // Modo confirmación: true si el usuario pulsa el botón de acción (OK), false si cierra con la X.
+    public bool Confirmed = false;
 
     public MessageBox()
     {
@@ -93,7 +95,15 @@ public partial class MessageBox : Window
 
     private void OkButton_Click(object? sender, EventArgs e)
     {
+        Confirmed = true;
         Window!.Close();
+    }
+
+    /// <summary>Convierte el diálogo en una confirmación: cambia el texto del botón de acción.
+    /// Pulsar ese botón → Confirmed=true; cerrar con la X → false.</summary>
+    public void SetConfirmMode(string okButtonText)
+    {
+        if (OkButton != null) OkButton.Text = okButtonText;
     }
 
     private void TitleBarLabel_PointerPressed(object? sender, PointerPressedEventArgs e)
