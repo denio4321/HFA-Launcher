@@ -1,14 +1,19 @@
 name: Release
 
 # Al hacer push de un tag v* (o manualmente), compila el launcher self-contained + single-file
-# para Windows, Linux y macOS, y crea UNA Release con todos los binarios adjuntos.
+# para Windows, Linux y macOS, lo EMPAQUETA en el formato nativo de cada plataforma y crea UNA
+# Release con todos los artefactos.
 #
-# Cada RID se compila en su runner adecuado porque el .csproj embebe los .zip de parche AIR
-# de forma condicional por RuntimeIdentifier (win-x86 / linux-x64 / linux-arm64 / osx-x64 /
-# osx-arm64). win-x86 cubre Windows de 32 y 64 bits.
+# Empaquetado por plataforma:
+#   Windows → .exe (single-file, doble clic) + .zip
+#   Linux   → .AppImage (portable, doble clic) + .tar.gz (respaldo)
+#   macOS   → .dmg (con .app, arrastrar a Aplicaciones) + .app.zip (respaldo)
 #
-# NOTA: los binarios van SIN FIRMAR. macOS mostrará Gatekeeper (clic derecho → Abrir) y Windows
-# SmartScreen hasta que se añada firma/notarización (rcodesign + Apple Dev ID / Azure Trusted Signing).
+# Cada RID se compila en su runner porque el .csproj embebe los .zip de parche AIR por
+# RuntimeIdentifier (win-x86 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64). win-x86 cubre 32/64 bits.
+#
+# SIN FIRMAR (Gatekeeper/SmartScreen) hasta añadir rcodesign+Apple Dev ID / Azure Trusted Signing.
+# El .app lleva firma AD-HOC (codesign -s -) para que al menos no salga "está dañado".
 
 on:
   push:
@@ -27,8 +32,8 @@ jobs:
       matrix:
         include:
           - { os: windows-latest, rid: win-x86 }
-          - { os: ubuntu-latest,  rid: linux-x64 }
-          - { os: ubuntu-latest,  rid: linux-arm64 }
+          - { os: ubuntu-latest,  rid: linux-x64,   appimage_arch: x86_64 }
+          - { os: ubuntu-latest,  rid: linux-arm64, appimage_arch: aarch64 }
           - { os: macos-latest,   rid: osx-x64 }
           - { os: macos-latest,   rid: osx-arm64 }
     runs-on: ${{ matrix.os }}
@@ -60,19 +65,109 @@ jobs:
           -p:Version=${{ steps.ver.outputs.version }}
           -o publish
 
-      - name: Package (Windows → .exe + .zip)
+      # ---------------- Windows: .exe + .zip ----------------
+      - name: Package Windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           Copy-Item publish/HabboCustomLauncher.exe "HFA-Launcher-${{ github.ref_name }}-${{ matrix.rid }}.exe" -Force
           Compress-Archive -Path publish/* -DestinationPath "HFA-Launcher-${{ github.ref_name }}-${{ matrix.rid }}.zip" -Force
 
-      - name: Package (Linux/macOS → .tar.gz)
-        if: runner.os != 'Windows'
+      # ---------------- Linux: .AppImage + .tar.gz ----------------
+      - name: Package Linux
+        if: runner.os == 'Linux'
         shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+          RID: ${{ matrix.rid }}
+          APPIMAGE_ARCH: ${{ matrix.appimage_arch }}
         run: |
-          chmod +x publish/HabboCustomLauncher || true
-          tar -C publish -czf "HFA-Launcher-${{ github.ref_name }}-${{ matrix.rid }}.tar.gz" .
+          set -e
+          # tar.gz de respaldo
+          chmod +x publish/HabboCustomLauncher
+          tar -C publish -czf "HFA-Launcher-${TAG}-${RID}.tar.gz" .
+
+          # AppDir
+          APPDIR=AppDir
+          mkdir -p "$APPDIR/usr/bin"
+          cp publish/HabboCustomLauncher "$APPDIR/usr/bin/HabboCustomLauncher"
+          chmod +x "$APPDIR/usr/bin/HabboCustomLauncher"
+          cp Assets/HabboCustomLauncherIcon.png "$APPDIR/hfa-launcher.png"
+          cat > "$APPDIR/hfa-launcher.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=HFA Launcher
+          Exec=HabboCustomLauncher
+          Icon=hfa-launcher
+          Categories=Game;
+          Terminal=false
+          EOF
+          cat > "$APPDIR/AppRun" <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/bin/HabboCustomLauncher" "$@"
+          EOF
+          chmod +x "$APPDIR/AppRun"
+
+          # appimagetool (x86_64, corre en el runner x64). Para arm64 se le pasa el runtime aarch64.
+          curl -fsSL -o appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+          EXTRA=""
+          if [ "$APPIMAGE_ARCH" = "aarch64" ]; then
+            curl -fsSL -o runtime-aarch64 "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-aarch64"
+            EXTRA="--runtime-file runtime-aarch64"
+          fi
+          ARCH="$APPIMAGE_ARCH" ./appimagetool --appimage-extract-and-run $EXTRA "$APPDIR" "HFA-Launcher-${TAG}-${RID}.AppImage"
+
+      # ---------------- macOS: .app → .dmg + .app.zip ----------------
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+          RID: ${{ matrix.rid }}
+          VER: ${{ steps.ver.outputs.version }}
+        run: |
+          set -e
+          APP="HFA Launcher.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp publish/HabboCustomLauncher "$APP/Contents/MacOS/HabboCustomLauncher"
+          chmod +x "$APP/Contents/MacOS/HabboCustomLauncher"
+
+          # Icono .icns desde el .png
+          mkdir -p icon.iconset
+          for s in 16 32 64 128 256 512; do
+            sips -z $s $s Assets/HabboCustomLauncherIcon.png --out "icon.iconset/icon_${s}x${s}.png" >/dev/null
+            d=$((s*2))
+            sips -z $d $d Assets/HabboCustomLauncherIcon.png --out "icon.iconset/icon_${s}x${s}@2x.png" >/dev/null
+          done
+          iconutil -c icns icon.iconset -o "$APP/Contents/Resources/HFA.icns"
+
+          cat > "$APP/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>HFA Launcher</string>
+            <key>CFBundleDisplayName</key><string>HFA Launcher</string>
+            <key>CFBundleIdentifier</key><string>com.hfa.launcher</string>
+            <key>CFBundleExecutable</key><string>HabboCustomLauncher</string>
+            <key>CFBundleIconFile</key><string>HFA.icns</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleVersion</key><string>${VER}</string>
+            <key>CFBundleShortVersionString</key><string>${VER}</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          EOF
+
+          # Firma ad-hoc (evita "está dañado"; NO quita el aviso de desarrollador no identificado).
+          codesign --force --deep --sign - "$APP" || true
+
+          # .app.zip de respaldo + .dmg
+          ditto -c -k --keepParent "$APP" "HFA-Launcher-${TAG}-${RID}.app.zip"
+          hdiutil create -volname "HFA Launcher" -srcfolder "$APP" -ov -format UDZO "HFA-Launcher-${TAG}-${RID}.dmg"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -82,6 +177,8 @@ jobs:
             HFA-Launcher-*.exe
             HFA-Launcher-*.zip
             HFA-Launcher-*.tar.gz
+            HFA-Launcher-*.AppImage
+            HFA-Launcher-*.dmg
           if-no-files-found: ignore
 
   release:

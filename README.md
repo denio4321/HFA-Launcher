@@ -30,8 +30,16 @@ dotnet publish HabboCustomLauncher.csproj -c Release -r win-x86 --self-contained
 
 Hay un workflow de GitHub Actions (`.github/workflows/release.yml`) que, **al hacer push de un tag
 `v*`**, compila el launcher self-contained + single-file para **Windows, Linux y macOS** (matriz de
-RIDs: `win-x86`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`) y crea **una** Release con
-todos los binarios adjuntos (`.exe`+`.zip` en Windows, `.tar.gz` en Linux/macOS):
+RIDs: `win-x86`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`), lo **empaqueta en el formato
+nativo** de cada plataforma y crea **una** Release con todo:
+
+| Plataforma | Paquete | Instalación |
+|---|---|---|
+| Windows | `.exe` (single-file) + `.zip` | Doble clic (SmartScreen → "Ejecutar de todas formas") |
+| Linux | `.AppImage` + `.tar.gz` | `chmod +x *.AppImage && ./*.AppImage` |
+| macOS | `.dmg` (con `.app`) + `.app.zip` | Abrir el `.dmg`, arrastrar a Aplicaciones (clic derecho → Abrir la 1ª vez) |
+
+El `.app` lleva firma **ad-hoc**; sigue sin notarizar (Gatekeeper). Disparo:
 
 ```powershell
 git tag v1.0.0
