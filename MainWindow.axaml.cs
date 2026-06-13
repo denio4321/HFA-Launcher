@@ -63,7 +63,7 @@ public partial class MainWindow : Window
     public string AirPlusClientURL = "https://github.com/LilithRainbows/HabboAirPlus/releases/download/latest/HabboAir.swf";
     // Repo de distribución de clientes HFA (generado por HfaPlus build). AIR_HFA descarga el SWF
     // ya parcheado por versión desde aquí, en lugar de exigir un build local.
-    public string HfaPlusSwfBaseUrl = "https://raw.githubusercontent.com/denio4321/HfaPlusSwf/main";
+    public string HfaPlusSwfBaseUrl = "https://raw.githubusercontent.com/denio4321/HfaPlusSwf/master";
     // Repo del propio launcher: el autoactualizador consulta su última release.
     public const string LauncherRepo = "denio4321/HFA-Launcher";
     private bool _updateChecked = false;
@@ -452,6 +452,22 @@ public partial class MainWindow : Window
                     await Task.Delay(100);
                 }
             }
+
+            // Para AIR_Plus/AIR_HFA descargamos el SWF directo: validar que es un SWF real
+            // (cabecera CWS/FWS/ZWS) y no una página de error 404 guardada como .swf (~1 KB).
+            if ((UpdateSource == "AIR_Plus" || UpdateSource == "AIR_HFA") && File.Exists(clientFilePath))
+            {
+                string magic = new FileInfo(clientFilePath).Length >= 4 ? GetSwfType(clientFilePath) : "";
+                bool validSwf = magic.Length >= 3 && magic[1] == 'W' && magic[2] == 'S'; // CWS/FWS/ZWS
+                if (!validSwf)
+                {
+                    long badSize = new FileInfo(clientFilePath).Length;
+                    try { File.Delete(clientFilePath); } catch { }
+                    throw new Exception("El SWF descargado no es válido (" + badSize + " bytes). " +
+                        "¿Falta esa versión en el repo de distribución? URL: " + clientUrl);
+                }
+            }
+
             StartNewInstanceButton.Text = AppTranslator.ExtractingClient[CurrentLanguageInt];
 
             await Task.Run(() => CopyEmbeddedAsset(GetAirPatchNameForCurrentOS(), clientFolderPath));
@@ -885,12 +901,14 @@ public partial class MainWindow : Window
             }
             if (UpdateSource == "AIR_HFA")
             {
-                // La versión sigue siendo la oficial (para que los identificadores cuadren con
-                // AIR Official), pero el SWF ya parcheado se DESCARGA del repo de distribución
-                // HfaPlusSwf por versión, replicando el mecanismo de AirPlus.
+                // El SWF parcheado se descarga del repo HfaPlusSwf. El IDENTIFICADOR de versión es
+                // el "swfVersion" interno de versions.json (p. ej. "5-b3"): combina la versión
+                // oficial con un build incremental, así un re-parche de la MISMA versión oficial
+                // (que cambia muy poco) también dispara la re-descarga.
                 var officialUrls = new JsonClientUrls(await GetRemoteJsonAsync("https://" + CurrentLoginCode!.ServerUrl + "/gamedata/clienturls"));
-                string hfaSwfUrl = HfaPlusSwfBaseUrl + "/versions/" + officialUrls.FlashWindowsVersion + "/HabboAir.swf";
-                CurrentClientUrls = new JsonClientUrls(("{'flash-windows-version':'" + officialUrls.FlashWindowsVersion + "','flash-windows':'" + hfaSwfUrl + "'}").Replace("'", ((char)34).ToString()));
+                (string swfVersion, string fileRel) = await ResolveHfaSwfAsync(officialUrls.FlashWindowsVersion);
+                string hfaSwfUrl = HfaPlusSwfBaseUrl + "/" + fileRel;
+                CurrentClientUrls = new JsonClientUrls(("{'flash-windows-version':'" + swfVersion + "','flash-windows':'" + hfaSwfUrl + "'}").Replace("'", ((char)34).ToString()));
             }
             if (UpdateSource == "AIR_Plus")
             {
@@ -993,6 +1011,33 @@ public partial class MainWindow : Window
         {
             return "";
         }
+    }
+
+    /// <summary>
+    /// Resuelve, desde el versions.json del repo HFA, el build interno publicado para una versión
+    /// oficial de Habbo. Devuelve (swfVersion p.ej. "5-b3", ruta relativa del .swf). Lanza si no
+    /// hay build publicado para esa versión.
+    /// </summary>
+    private async Task<(string swfVersion, string fileRel)> ResolveHfaSwfAsync(string officialVersion)
+    {
+        string json = await GetRemoteJsonAsync(HfaPlusSwfBaseUrl + "/versions.json");
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            throw new Exception("No se pudo leer versions.json del repo HFA (" + HfaPlusSwfBaseUrl + "/versions.json).");
+        }
+        JsonElement root = JsonDocument.Parse(json).RootElement;
+        if (root.TryGetProperty("versions", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var v in arr.EnumerateArray())
+            {
+                string ver = v.TryGetProperty("version", out var vv) ? (vv.GetString() ?? "") : "";
+                if (ver != officialVersion) continue;
+                string swfVersion = v.TryGetProperty("swfVersion", out var sv) ? (sv.GetString() ?? ver) : ver;
+                string fileRel = v.TryGetProperty("file", out var f) ? (f.GetString() ?? ("versions/" + ver + "/HabboAir.swf")) : ("versions/" + ver + "/HabboAir.swf");
+                return (swfVersion, fileRel);
+            }
+        }
+        throw new Exception("No hay un cliente HFA publicado para la versión oficial " + officialVersion + " en el repo de distribución.");
     }
 
     private void LoginCodeButton_Click(object? sender, EventArgs e)
