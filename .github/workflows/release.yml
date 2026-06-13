@@ -25,12 +25,21 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # MSBuild Version exige x.y.z (sin la 'v' del tag). Derivamos la versión numérica.
+      - name: Derive version
+        id: ver
+        shell: bash
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          if [[ ! "$ver" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(\.[0-9]+)?$ ]]; then ver="1.0.0"; fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+
       - name: Publish (win-x86, self-contained)
         shell: pwsh
         run: >
           dotnet publish HabboCustomLauncher.csproj
           -c Release -r win-x86 --self-contained true
-          -p:Version=${{ github.ref_name }}
+          -p:Version=${{ steps.ver.outputs.version }}
           -o publish
 
       - name: Package zip
