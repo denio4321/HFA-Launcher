@@ -34,21 +34,28 @@ jobs:
           if [[ ! "$ver" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?(\.[0-9]+)?$ ]]; then ver="1.0.0"; fi
           echo "version=$ver" >> "$GITHUB_OUTPUT"
 
-      - name: Publish (win-x86, self-contained)
+      # Single-file para que el .exe sea autónomo (se pueda subir y ejecutar suelto).
+      - name: Publish (win-x86, single-file, self-contained)
         shell: pwsh
         run: >
           dotnet publish HabboCustomLauncher.csproj
           -c Release -r win-x86 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
           -p:Version=${{ steps.ver.outputs.version }}
           -o publish
 
-      - name: Package zip
+      - name: Prepare artifacts (.exe + .zip)
         shell: pwsh
-        run: Compress-Archive -Path publish/* -DestinationPath "HFA-Launcher-${{ github.ref_name }}-win-x86.zip"
+        run: |
+          Copy-Item publish/HabboCustomLauncher.exe "HFA-Launcher-${{ github.ref_name }}-win-x86.exe" -Force
+          Compress-Archive -Path publish/* -DestinationPath "HFA-Launcher-${{ github.ref_name }}-win-x86.zip" -Force
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: HFA-Launcher-*-win-x86.zip
+          files: |
+            HFA-Launcher-*-win-x86.exe
+            HFA-Launcher-*-win-x86.zip
           generate_release_notes: true
           fail_on_unmatched_files: true
