@@ -1,0 +1,56 @@
+<Application x:Class="HabboCustomLauncher.App"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             RequestedThemeVariant="Dark">
+
+  <Application.Styles>
+    <FluentTheme />
+  </Application.Styles>
+
+  <Application.Resources>
+    <!-- ===== Tipografías HFA (incrustadas en Assets) ===== -->
+    <FontFamily x:Key="NewSegoeUI">/Assets#Rajdhani</FontFamily>
+    <FontFamily x:Key="HfaBodyFont">/Assets#Rajdhani</FontFamily>
+    <FontFamily x:Key="HfaTitleFont">/Assets#Bebas Neue</FontFamily>
+
+    <!-- ===== Paleta HFA (Habbo Fútbol Asociación) ===== -->
+    <Color x:Key="HfaBlackColor">#080a0d</Color>
+    <Color x:Key="HfaSurfaceColor">#0d1117</Color>
+    <Color x:Key="HfaSurface2Color">#141b24</Color>
+    <Color x:Key="HfaBorderColor">#1e3a2a</Color>
+    <Color x:Key="HfaBorderBrightColor">#2e6e48</Color>
+    <Color x:Key="HfaGreenColor">#4ade80</Color>
+    <Color x:Key="HfaGreenDarkColor">#22c55e</Color>
+    <Color x:Key="HfaGreenNeonColor">#00ff87</Color>
+    <Color x:Key="HfaGoldColor">#f59e0b</Color>
+    <Color x:Key="HfaRedColor">#f87171</Color>
+    <Color x:Key="HfaTextColor">#e2e8f0</Color>
+    <Color x:Key="HfaMutedColor">#94a3b8</Color>
+
+    <SolidColorBrush x:Key="HfaBlackBrush" Color="{StaticResource HfaBlackColor}" />
+    <SolidColorBrush x:Key="HfaSurfaceBrush" Color="{StaticResource HfaSurfaceColor}" />
+    <SolidColorBrush x:Key="HfaSurface2Brush" Color="{StaticResource HfaSurface2Color}" />
+    <SolidColorBrush x:Key="HfaBorderBrush" Color="{StaticResource HfaBorderColor}" />
+    <SolidColorBrush x:Key="HfaBorderBrightBrush" Color="{StaticResource HfaBorderBrightColor}" />
+    <SolidColorBrush x:Key="HfaGreenBrush" Color="{StaticResource HfaGreenColor}" />
+    <SolidColorBrush x:Key="HfaGoldBrush" Color="{StaticResource HfaGoldColor}" />
+    <SolidColorBrush x:Key="HfaTextBrush" Color="{StaticResource HfaTextColor}" />
+    <SolidColorBrush x:Key="HfaMutedBrush" Color="{StaticResource HfaMutedColor}" />
+
+    <!-- Barra de título: superficie oscura con tinte verde -->
+    <SolidColorBrush x:Key="HfaTitleBarBrush" Color="#0f1a14" />
+
+    <!-- Fondo de ventana en degradado oscuro (sustituye al backdrop rosa) -->
+    <LinearGradientBrush x:Key="HfaWindowBackdrop" StartPoint="0%,0%" EndPoint="0%,100%">
+      <GradientStop Offset="0" Color="#0f1a14" />
+      <GradientStop Offset="0.45" Color="#0b1016" />
+      <GradientStop Offset="1" Color="#080a0d" />
+    </LinearGradientBrush>
+
+    <!-- Glow verde radial sutil para superponer al fondo -->
+    <RadialGradientBrush x:Key="HfaGreenGlow" Center="50%,18%" GradientOrigin="50%,18%" RadiusX="75%" RadiusY="75%">
+      <GradientStop Offset="0" Color="#2638ff87" />
+      <GradientStop Offset="1" Color="#00080a0d" />
+    </RadialGradientBrush>
+  </Application.Resources>
+</Application>

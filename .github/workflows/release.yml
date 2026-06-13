@@ -1,0 +1,45 @@
+name: Release
+
+# Crea una Release de GitHub al hacer push de un tag v* (p. ej. v1.0.0).
+# Compila el launcher self-contained para Windows (RID win-x86: corre en x86 y x64, y embebe
+# los parches AIR de Windows que el .csproj solo incluye con win-x86/Debug) y adjunta el zip.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:   # permite lanzarlo a mano desde la pestaña Actions
+
+permissions:
+  contents: write       # necesario para crear la Release
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish (win-x86, self-contained)
+        shell: pwsh
+        run: >
+          dotnet publish HabboCustomLauncher.csproj
+          -c Release -r win-x86 --self-contained true
+          -p:Version=${{ github.ref_name }}
+          -o publish
+
+      - name: Package zip
+        shell: pwsh
+        run: Compress-Archive -Path publish/* -DestinationPath "HFA-Launcher-${{ github.ref_name }}-win-x86.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: HFA-Launcher-*-win-x86.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true

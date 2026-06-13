@@ -1,0 +1,93 @@
+<Window x:Class="HabboCustomLauncher.MainWindow"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:HabboCustomLauncher"
+        x:Name="Window"
+        mc:Ignorable="d" Width="642" Height="513" CanResize="False" SystemDecorations="BorderOnly" Opacity="1"
+        Title="HFA Launcher"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource HfaBlackBrush}" FontFamily="{StaticResource HfaBodyFont}" Icon="/Assets/HabboCustomLauncherIcon.ico">
+	<Grid>
+		<Grid.RowDefinitions>
+			<RowDefinition Height="32"/>
+			<RowDefinition Height="*"/>
+		</Grid.RowDefinitions>
+		<Label Name="TitleBarLabel" Grid.Row="0" Background="{StaticResource HfaTitleBarBrush}" Foreground="{StaticResource HfaGreenBrush}" Content="    HFA · LAUNCHER" FontFamily="{StaticResource HfaTitleFont}" FontSize="19" VerticalContentAlignment="Center"/>
+		<Border Grid.Row="0" VerticalAlignment="Bottom" Height="2" Background="{StaticResource HfaGreenBrush}"/>
+		<local:CustomButton x:Name="CloseButton" IsFocusable="False" Grid.Row="0" Foreground="White" HorizontalAlignment="Right" Text="   X   " BackColor="{StaticResource HfaRedColor}"/>
+		<Border Grid.Row="1" BorderThickness="1,0,1,1" BorderBrush="{StaticResource HfaBorderBrightBrush}">
+			<Grid Grid.Row="0">
+				<Panel>
+					<Panel Background="{StaticResource HfaWindowBackdrop}"/>
+					<Panel Background="{StaticResource HfaGreenGlow}"/>
+				</Panel>
+				<Grid>
+					<Grid.RowDefinitions>
+						<RowDefinition Height="Auto"/>
+						<RowDefinition/>
+						<RowDefinition Height="Auto"/>
+					</Grid.RowDefinitions>
+					<Grid Grid.Row="0">
+						<Image x:Name="HabboLogoButton" Source="/Assets/hfa-logo.png" Width="104" Height="104" Stretch="Uniform" Margin="20,18,20,0" HorizontalAlignment="Center" VerticalAlignment="Top"/>
+					</Grid>
+					<Grid Grid.Row="1" Margin="100,0,100,0" VerticalAlignment="Center">
+						<Grid>
+							<Grid.RowDefinitions>
+								<RowDefinition Height="Auto"/>
+								<RowDefinition Height="Auto"/>
+								<RowDefinition Height="Auto"/>
+							</Grid.RowDefinitions>
+							<local:CustomButton x:Name="LoginCodeButton" Grid.Row="0" Text="Clipboard login code not detected" BackColor="{StaticResource HfaSurface2Color}" Foreground="{StaticResource HfaMutedColor}" Margin="0,0,0,10" Height="40" IsButtonCornered="False"/>
+							<Grid Grid.Row="1" Margin="0,0,0,10" Height="40">
+								<Grid.ColumnDefinitions>
+									<ColumnDefinition />
+									<ColumnDefinition Width="Auto"/>
+								</Grid.ColumnDefinitions>
+								<local:CustomButton IsButtonDisabled="True" x:Name="StartNewInstanceButton" Grid.Column="0" Text="Unknown client version" BackColor="{StaticResource HfaGreenDarkColor}" Foreground="#062012" />
+								<local:CustomButton IsButtonDisabled="True" x:Name="StartNewInstanceButton2" Grid.Column="1" Width="30" Text="X" BackColor="{StaticResource HfaGreenDarkColor}" Foreground="#062012" Margin="5,0,0,0"/>
+							</Grid>
+							<Grid Grid.Row="2" Margin="0,0,0,10" Height="40">
+								<Grid.ColumnDefinitions>
+									<ColumnDefinition />
+									<ColumnDefinition Width="Auto"/>
+								</Grid.ColumnDefinitions>
+								<local:CustomButton IsButtonDisabled="True" x:Name="ChangeUpdateSourceButton" Grid.Column="0" Text="Current update source: AIR (Official)" BackColor="{StaticResource HfaGoldColor}" Foreground="#241400" />
+								<local:CustomButton IsButtonDisabled="True" x:Name="ChangeUpdateSourceButton2" Grid.Column="1" Width="30" Text="?" BackColor="{StaticResource HfaGoldColor}" Foreground="#241400" Margin="5,0,0,0"/>
+							</Grid>
+						</Grid>
+					</Grid>
+					<Grid Grid.Row="2">
+						<Grid Background="#080a0d" Opacity="0.55"/>
+						<Border VerticalAlignment="Top" Height="1" Background="{StaticResource HfaBorderBrush}"/>
+						<local:CustomButton IsButtonDisabled="False" x:Name="FooterButton" Text="Unknown CustomLauncher version" BackColor="Transparent" Foreground="{StaticResource HfaMutedColor}" Opacity="0.9" HorizontalAlignment="Center" VerticalAlignment="Center" Height="40" Margin="0,0,13,0"/>
+						<Image Name="GithubButton" Source="/Assets/github-icon.png" Stretch="None" Margin="15,10,0,10" HorizontalAlignment="Left"/>
+						<TextBlock x:Name="CreditsLink" Text="♥ Credits" FontFamily="{StaticResource HfaBodyFont}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource HfaGreenBrush}" TextDecorations="Underline" Cursor="Hand" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="66,0,0,0" ClipToBounds="False"/>
+						<Image Name="SulakeButton" Source="/Assets/habbo-footer.png" Stretch="None" Margin="0,10,15,10" HorizontalAlignment="Right"/>
+					</Grid>
+				</Grid>
+				<!-- Overlay de créditos/agradecimientos: oculto hasta que se clica "credits" en el footer -->
+				<Border x:Name="CreditsOverlay" IsVisible="False" Background="#E6080a0d">
+					<Border x:Name="CreditsCard" Width="430" HorizontalAlignment="Center" VerticalAlignment="Center"
+							Background="{StaticResource HfaSurfaceBrush}" BorderBrush="{StaticResource HfaBorderBrightBrush}"
+							BorderThickness="1" CornerRadius="10" Padding="26">
+						<StackPanel Spacing="14">
+							<TextBlock x:Name="CreditsTitle" Text="Acknowledgements" FontFamily="{StaticResource HfaTitleFont}" FontSize="28"
+									   Foreground="{StaticResource HfaGreenBrush}" HorizontalAlignment="Center"/>
+							<TextBlock x:Name="CreditsBody" Text="" TextWrapping="Wrap" TextAlignment="Center" LineHeight="21"
+									   Foreground="{StaticResource HfaTextBrush}" FontSize="14" HorizontalAlignment="Center"/>
+							<StackPanel Spacing="7" Margin="0,4,0,0" HorizontalAlignment="Center">
+								<TextBlock x:Name="CreditsRepoLink" Text="" FontSize="13" TextDecorations="Underline" Cursor="Hand"
+										   Foreground="{StaticResource HfaGreenBrush}" HorizontalAlignment="Center"/>
+								<TextBlock x:Name="CreditsAccountLink" Text="@LilithRainbows" FontSize="13" TextDecorations="Underline" Cursor="Hand"
+										   Foreground="{StaticResource HfaGreenBrush}" HorizontalAlignment="Center"/>
+							</StackPanel>
+							<local:CustomButton x:Name="CreditsCloseButton" Text="Close" Width="130" Height="36" Margin="0,8,0,0"
+												HorizontalAlignment="Center" BackColor="{StaticResource HfaSurface2Color}" Foreground="{StaticResource HfaMutedColor}"/>
+						</StackPanel>
+					</Border>
+				</Border>
+			</Grid>
+		</Border>
+	</Grid>
+</Window>

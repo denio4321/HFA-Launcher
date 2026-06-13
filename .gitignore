@@ -1,0 +1,19 @@
+# Build output
+bin/
+obj/
+publish/
+[Dd]ebug/
+[Rr]elease/
+*.user
+
+# IDE
+.vs/
+.idea/
+*.suo
+
+# OS
+Thumbs.db
+.DS_Store
+
+# NOTA: Assets/ (incl. AirSwfDecryptor.dll, fuentes y los .zip de parche AIR) SÍ se versionan:
+# son dependencias necesarias para compilar y ejecutar el launcher.

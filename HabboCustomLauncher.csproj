@@ -1,0 +1,104 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RootNamespace>HabboCustomLauncher</RootNamespace>
+    <AssemblyName>HabboCustomLauncher</AssemblyName>
+    <ApplicationIcon>Assets\HabboCustomLauncherIcon.ico</ApplicationIcon>
+    <!--
+      El proyecto VB hacía el wiring de controles a mano (AvaloniaXamlLoader.Load + FindNameScope)
+      porque el name generator de Avalonia no se ejecuta para VB. Se desactiva aquí para conservar
+      ese patrón 1:1 en C# y evitar que se genere un InitializeComponent en conflicto.
+    -->
+    <AvaloniaNameGeneratorIsEnabled>false</AvaloniaNameGeneratorIsEnabled>
+    <!--
+      NU1903: advisory de Tmds.DBus.Protocol 0.20.0, que entra de forma TRANSITIVA vía
+      Avalonia 11.2 (X11/DBus, solo Linux). El proyecto VB original tenía exactamente la misma
+      dependencia y advisory; no lo introduce la migración. No se fuerza una versión más nueva
+      porque supondría un salto de API en una librería de interop nativo y podría romper el
+      runtime en Linux. Se suprime el warning conscientemente (ver MIGRATION_NOTES).
+    -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\github-icon-2.png" />
+    <None Remove="Assets\github-icon.png" />
+    <None Remove="Assets\habbo-footer-2.png" />
+    <None Remove="Assets\habbo-logo-big-2.png" />
+    <None Remove="Assets\HabboAirPlusPatch.zip" />
+    <None Remove="Assets\HabboCustomLauncherIcon.png" />
+    <None Remove="Assets\Segoe-UI-Variable-Static-Text.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="AirSwfDecryptor">
+      <HintPath>Assets\AirSwfDecryptor.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\github-icon-2.png" />
+    <AvaloniaResource Include="Assets\github-icon.png" />
+    <AvaloniaResource Include="Assets\habbo-footer-2.png" />
+    <AvaloniaResource Include="Assets\habbo-footer.png" />
+    <AvaloniaResource Include="Assets\habbo-logo-big-2.png" />
+    <AvaloniaResource Include="Assets\habbo-logo-big.png" />
+    <AvaloniaResource Include="Assets\HabboAirPlusPatch.zip" />
+    <AvaloniaResource Include="Assets\HabboCustomLauncherIcon.png" />
+    <AvaloniaResource Include="Assets\modal-backdrop-pink.png" />
+    <AvaloniaResource Include="Assets\hfa-logo.png" />
+    <AvaloniaResource Include="Assets\Segoe-UI-Variable-Static-Text.ttf" />
+    <!-- Tipografías HFA (Google Fonts, OFL): Bebas Neue para títulos, Rajdhani para UI -->
+    <AvaloniaResource Include="Assets\BebasNeue-Regular.ttf" />
+    <AvaloniaResource Include="Assets\Rajdhani-Regular.ttf" />
+    <AvaloniaResource Include="Assets\Rajdhani-Medium.ttf" />
+    <AvaloniaResource Include="Assets\Rajdhani-SemiBold.ttf" />
+    <AvaloniaResource Include="Assets\Rajdhani-Bold.ttf" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'win-x86' OR '$(Configuration)' == 'Debug'">
+    <AvaloniaResource Include="Assets\HabboAirWindowsPatch_x86.zip" />
+    <AvaloniaResource Include="Assets\HabboAirWindowsPatch_x64.zip" />
+    <AvaloniaResource Include="Assets\HabboAirExtensionsWindowsPatch.zip" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'linux-x64' OR '$(Configuration)' == 'Debug'">
+    <AvaloniaResource Include="Assets\HabboAirLinuxPatch_x64.zip" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'linux-arm64' OR '$(Configuration)' == 'Debug'">
+    <AvaloniaResource Include="Assets\HabboAirLinuxPatch_arm64.zip" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'osx-x64' OR '$(Configuration)' == 'Debug'">
+    <AvaloniaResource Include="Assets\HabboAirOSXPatch.zip" />
+    <AvaloniaResource Include="Assets\HabboAirOSXTahoePatch.zip" />
+    <AvaloniaResource Include="Assets\HabboAirExtensionsOSXPatch.zip" />
+    <AvaloniaResource Include="Assets\LauncherShortcutOSXPatch.zip" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'osx-arm64' OR '$(Configuration)' == 'Debug'">
+    <AvaloniaResource Include="Assets\HabboAirOSXPatch.zip" />
+    <AvaloniaResource Include="Assets\HabboAirOSXTahoePatch.zip" />
+    <AvaloniaResource Include="Assets\HabboAirExtensionsOSXPatch.zip" />
+    <AvaloniaResource Include="Assets\LauncherShortcutOSXPatch.zip" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\HabboCustomLauncherIcon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.0" />
+    <PackageReference Include="WindowsShortcutFactory" Version="1.2.0" />
+  </ItemGroup>
+
+</Project>
